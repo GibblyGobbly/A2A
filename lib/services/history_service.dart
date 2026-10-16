@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
@@ -6,8 +7,14 @@ import '../models/conversion_result.dart';
 
 class HistoryService {
   static const String _fileName = 'conversion_history.json';
-  static final ValueNotifier<List<ConversionResult>> historyNotifier = ValueNotifier<List<ConversionResult>>([]);
+  static const int _maxEntries = 500;
+  static final ValueNotifier<List<ConversionResult>> historyNotifier =
+      ValueNotifier<List<ConversionResult>>([]);
   static bool _isInitialized = false;
+
+  static void _log(String message, Object error) {
+    developer.log('$message: $error', name: 'HistoryService');
+  }
 
   static Future<File> _getHistoryFile() async {
     final dir = await getApplicationDocumentsDirectory();
@@ -20,59 +27,63 @@ class HistoryService {
     _isInitialized = true;
   }
 
-  static Future<List<ConversionResult>> getHistory() async {
+  static Future<void> refreshHistory() async {
     try {
       final file = await _getHistoryFile();
       if (!await file.exists()) {
         historyNotifier.value = [];
-        return [];
+        return;
       }
-      final jsonString = await file.readAsString();
-      final List<dynamic> list = jsonDecode(jsonString);
-      final results = list.map((item) => ConversionResult.fromJson(item)).toList();
-      historyNotifier.value = results;
-      return results;
-    } catch (_) {
+      final List<dynamic> list = jsonDecode(await file.readAsString());
+      historyNotifier.value = list
+          .whereType<Map<String, dynamic>>()
+          .map(ConversionResult.fromJson)
+          .toList();
+    } on Exception catch (e) {
+      // A corrupt history file must not stop the app from starting.
+      _log('History could not be read; starting empty', e);
       historyNotifier.value = [];
-      return [];
     }
   }
 
-  static Future<void> refreshHistory() async {
-    await getHistory();
+  static Future<void> _persist(List<ConversionResult> list) async {
+    historyNotifier.value = list;
+    try {
+      final file = await _getHistoryFile();
+      await file.writeAsString(
+        jsonEncode(list.map((e) => e.toJson()).toList()),
+        flush: true,
+      );
+    } on Exception catch (e) {
+      _log('History could not be saved', e);
+    }
   }
 
   static Future<void> addResult(ConversionResult result) async {
-    try {
-      final list = List<ConversionResult>.from(historyNotifier.value);
-      list.insert(0, result);
-      historyNotifier.value = list;
-
-      final file = await _getHistoryFile();
-      final jsonString = jsonEncode(list.map((e) => e.toJson()).toList());
-      await file.writeAsString(jsonString);
-    } catch (_) {}
+    final list = [result, ...historyNotifier.value];
+    await _persist(
+      list.length > _maxEntries ? list.sublist(0, _maxEntries) : list,
+    );
   }
 
-  static Future<void> clearHistory() async {
-    try {
-      historyNotifier.value = [];
-      final file = await _getHistoryFile();
-      if (await file.exists()) {
-        await file.delete();
-      }
-    } catch (_) {}
-  }
+  static Future<void> clearHistory() => _persist([]);
 
-  static Future<void> deleteItem(ConversionResult item) async {
-    try {
-      final list = List<ConversionResult>.from(historyNotifier.value);
-      list.removeWhere((element) => element.targetPath == item.targetPath && element.timestamp == item.timestamp);
-      historyNotifier.value = list;
+  static bool _same(ConversionResult a, ConversionResult b) =>
+      a.targetPath == b.targetPath && a.timestamp == b.timestamp;
 
-      final file = await _getHistoryFile();
-      final jsonString = jsonEncode(list.map((e) => e.toJson()).toList());
-      await file.writeAsString(jsonString);
-    } catch (_) {}
+  static Future<void> deleteItem(ConversionResult item) =>
+      _persist(historyNotifier.value.where((e) => !_same(e, item)).toList());
+
+  static Future<void> deleteItems(List<ConversionResult> items) => _persist(
+    historyNotifier.value
+        .where((e) => !items.any((item) => _same(e, item)))
+        .toList(),
+  );
+
+  /// Puts a removed item back at its previous position (for undo).
+  static Future<void> restoreItem(ConversionResult item, int index) async {
+    final list = List<ConversionResult>.from(historyNotifier.value);
+    list.insert(index.clamp(0, list.length), item);
+    await _persist(list);
   }
 }

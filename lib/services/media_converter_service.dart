@@ -1,250 +1,261 @@
+import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit_config.dart';
+import 'package:ffmpeg_kit_flutter_new/ffmpeg_session.dart';
 import 'package:ffmpeg_kit_flutter_new/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import '../models/conversion_options.dart';
 import '../models/conversion_result.dart';
+import '../models/conversion_target.dart';
 import '../models/file_item.dart';
 import 'app_storage_service.dart';
+import 'av1_encoder_service.dart';
+import 'ffmpeg_commands.dart';
 
 class MediaConverterService {
+  static int? _activeSessionId;
+  static bool _cancelRequested = false;
+
   static Future<void> cancelActiveConversions() async {
+    _cancelRequested = true;
+    await Av1EncoderService.cancel();
+    final id = _activeSessionId;
     try {
-      await FFmpegKit.cancel();
-    } catch (_) {}
+      await FFmpegKit.cancel(id);
+    } on Exception catch (e) {
+      developer.log('Cancel failed: $e', name: 'MediaConverterService');
+    }
+  }
+
+  static Future<MediaProbe> probe(FileItem source) async {
+    try {
+      final session = await FFprobeKit.getMediaInformation(source.path);
+      final info = session.getMediaInformation();
+      if (info == null) return MediaProbe(fileSizeBytes: source.sizeInBytes);
+      int? videoBitrate;
+      int? audioBitrate;
+      int? width;
+      int? height;
+      var hasVideo = false;
+      var hasAudio = false;
+      for (final stream in info.getStreams()) {
+        final type = stream.getType();
+        // Cover art in audio files is reported as a video stream; ignore attached pictures.
+        final disposition = stream.getAllProperties()?['disposition'];
+        final isCoverArt =
+            disposition is Map && disposition['attached_pic'] == 1;
+        if (type == 'video' && !hasVideo && !isCoverArt) {
+          hasVideo = true;
+          videoBitrate = int.tryParse(stream.getBitrate() ?? '');
+          width = stream.getWidth();
+          height = stream.getHeight();
+        } else if (type == 'audio' && !hasAudio) {
+          hasAudio = true;
+          audioBitrate = int.tryParse(stream.getBitrate() ?? '');
+        }
+      }
+      return MediaProbe(
+        durationSeconds: double.tryParse(info.getDuration() ?? '') ?? 0,
+        fileSizeBytes: source.sizeInBytes,
+        formatBitrate: int.tryParse(info.getBitrate() ?? ''),
+        videoBitrate: videoBitrate,
+        audioBitrate: audioBitrate,
+        width: width,
+        height: height,
+        hasVideo: hasVideo,
+        hasAudio: hasAudio,
+      );
+    } on Exception catch (e) {
+      developer.log(
+        'Probe failed for ${source.path}: $e',
+        name: 'MediaConverterService',
+      );
+      return MediaProbe(fileSizeBytes: source.sizeInBytes);
+    }
+  }
+
+  /// Runs FFmpeg asynchronously so it can be cancelled, reporting progress from 0 to 1.
+  static Future<FFmpegSession> _run(
+    List<String> args,
+    double totalMs,
+    void Function(double)? onProgress,
+  ) {
+    final completer = Completer<FFmpegSession>();
+    FFmpegKit.executeWithArgumentsAsync(
+      args,
+      (session) => completer.complete(session),
+      null,
+      (statistics) {
+        if (totalMs > 0 && onProgress != null) {
+          onProgress((statistics.getTime() / totalMs).clamp(0.0, 1.0));
+        }
+      },
+    ).then(
+      (session) => _activeSessionId = session.getSessionId(),
+      onError: completer.completeError,
+    );
+    return completer.future;
+  }
+
+  /// Runs [args] in ffmpeg-kit. Returns null on success, or the error text.
+  static Future<String?> _runKit(
+    List<String> args,
+    double totalMs,
+    void Function(double)? onProgress,
+  ) async {
+    final session = await _run(args, totalMs, onProgress);
+    final code = await session.getReturnCode();
+    if (ReturnCode.isSuccess(code)) return null;
+    if (ReturnCode.isCancel(code)) return 'Cancelled';
+    return _failureText(session);
+  }
+
+  /// Runs [args] in the bundled SVT-AV1 executable. Returns null on success.
+  static Future<String?> _runSvt(
+    List<String> args,
+    double totalMs,
+    void Function(double)? onProgress,
+  ) async {
+    final result = await Av1EncoderService.run(
+      args,
+      onTime: (micros) {
+        if (totalMs > 0) {
+          onProgress?.call((micros / 1000 / totalMs).clamp(0.0, 1.0));
+        }
+      },
+    );
+    if (result.isSuccess) return null;
+    return result.errorTail.isEmpty
+        ? 'AV1 encoder exited with code ${result.exitCode}'
+        : result.errorTail;
+  }
+
+  static Future<String> _failureText(FFmpegSession session) async {
+    final logs = await session.getAllLogsAsString() ?? '';
+    final lines = logs
+        .split('\n')
+        .map((l) => l.trim())
+        .where((l) => l.isNotEmpty)
+        .toList();
+    // The last few log lines carry the actual FFmpeg error.
+    final tail = lines.length > 4 ? lines.sublist(lines.length - 4) : lines;
+    final code = (await session.getReturnCode())?.getValue();
+    return tail.isEmpty ? 'FFmpeg failed with code $code' : tail.join('\n');
   }
 
   static Future<ConversionResult> convertMedia({
     required FileItem sourceFile,
-    required String targetFormat,
+    required ConversionTarget target,
     required ConversionOptions options,
-    Function(double progress, String status)? onProgress,
+    void Function(double progress)? onProgress,
   }) async {
     final startTime = DateTime.now();
-    final cleanTarget = targetFormat.toLowerCase().replaceAll('.', '').trim();
-    final baseName = sourceFile.name.contains('.')
-        ? sourceFile.name.substring(0, sourceFile.name.lastIndexOf('.'))
-        : sourceFile.name;
-
-    final actualExtension = _resolveActualExtension(cleanTarget);
+    _cancelRequested = false;
+    final extension = FfmpegCommands.outputExtension(target.id);
     final targetPath = await AppStorageService.generateOutputPath(
-      baseName: baseName,
-      extension: actualExtension,
+      baseName: sourceFile.baseName,
+      extension: extension,
     );
+    final outFile = File(targetPath);
 
-    if (File(targetPath).existsSync()) {
-      File(targetPath).deleteSync();
-    }
-
-    double totalDurationMs = 0;
-    int sourceBitrate = 0;
-    try {
-      final probeSession = await FFprobeKit.getMediaInformation(sourceFile.path);
-      final mediaInfo = probeSession.getMediaInformation();
-      if (mediaInfo != null) {
-        final durationStr = mediaInfo.getDuration();
-        if (durationStr != null) {
-          final seconds = double.tryParse(durationStr) ?? 0;
-          totalDurationMs = seconds * 1000;
-        }
-        final bitrateStr = mediaInfo.getBitrate();
-        if (bitrateStr != null) {
-          sourceBitrate = int.tryParse(bitrateStr) ?? 0;
-        }
-      }
-    } catch (_) {}
-
-    FFmpegKitConfig.enableStatisticsCallback((statistics) {
-      if (totalDurationMs > 0 && onProgress != null) {
-        final currentMs = statistics.getTime().toDouble();
-        final fraction = (currentMs / totalDurationMs).clamp(0.0, 1.0);
-        final label = cleanTarget == 'mp3' || cleanTarget == 'aac' || cleanTarget == 'wav'
-            ? 'Extracting audio...'
-            : 'Converting video...';
-        onProgress(fraction, label);
-      }
-    });
-
-    final command = _buildFFmpegCommand(
-      inputPath: sourceFile.path,
-      outputPath: targetPath,
-      targetFormat: cleanTarget,
-      options: options,
-      sourceBitrate: sourceBitrate,
+    ConversionResult fail(String message) => ConversionResult.failure(
+      sourcePath: sourceFile.path,
+      sourceName: sourceFile.name,
+      targetExtension: extension,
+      originalSizeBytes: sourceFile.sizeInBytes,
+      startedAt: startTime,
+      errorMessage: message,
     );
 
     try {
-      var session = await FFmpegKit.execute(command);
-      var returnCode = await session.getReturnCode();
+      final info = await probe(sourceFile);
+      if (FfmpegCommands.audioTargets.contains(target.id) && !info.hasAudio) {
+        return fail('This file has no audio track.');
+      }
+      final totalMs = info.durationSeconds * 1000;
 
-      if (!ReturnCode.isSuccess(returnCode) && cleanTarget == 'av1') {
-        final crf = options.videoCrf.clamp(26, 48);
-        final scaleFilter = _resolveScaleFilter(options.videoResolution);
-        final fallbackCommand = '-y -threads 8 -i "${sourceFile.path}" $scaleFilter -c:v libx264 -preset veryfast -crf ${crf - 4} -c:a aac -b:a ${options.audioBitrate} -movflags +faststart "$targetPath"';
-        session = await FFmpegKit.execute(fallbackCommand);
-        returnCode = await session.getReturnCode();
+      // AV1: the phone's hardware encoder when it has one, then SVT-AV1 on all
+      // CPU cores, then H.264 as a last resort so the conversion completes.
+      final encoders = target.id == 'av1'
+          ? <VideoEncoder?>[
+              if (await AppStorageService.hasHardwareAv1Encoder())
+                VideoEncoder.av1Hardware,
+              if (await Av1EncoderService.isAvailable()) VideoEncoder.av1Svt,
+              VideoEncoder.h264,
+            ]
+          : <VideoEncoder?>[null];
+      String? note;
+      String? lastError;
+      var succeeded = false;
+      for (final encoder in encoders) {
+        if (_cancelRequested) break;
+        await AppStorageService.deleteQuietly(outFile);
+        onProgress?.call(0);
+        final args = FfmpegCommands.build(
+          input: sourceFile.path,
+          output: targetPath,
+          targetId: target.id,
+          options: options,
+          probe: info,
+          encoderOverride: encoder,
+        );
+        final error = encoder == VideoEncoder.av1Svt
+            ? await _runSvt(args, totalMs, onProgress)
+            : await _runKit(args, totalMs, onProgress);
+        if (error == null && await outFile.exists()) {
+          succeeded = true;
+          if (target.id == 'av1' && encoder == VideoEncoder.h264) {
+            note =
+                'No AV1 encoder could process this video, so it was saved as H.264.';
+          }
+          break;
+        }
+        lastError = error;
+        developer.log(
+          'Encoder ${encoder?.name ?? target.id} failed: $error',
+          name: 'MediaConverterService',
+        );
       }
 
-      FFmpegKitConfig.enableStatisticsCallback(null);
-
-      if (ReturnCode.isSuccess(returnCode)) {
-        final targetFile = File(targetPath);
-        await AppStorageService.notifyMediaScanner(targetPath);
-        final targetSize = targetFile.existsSync() ? (await targetFile.stat()).size : 0;
-
-        return ConversionResult(
-          sourcePath: sourceFile.path,
-          sourceName: sourceFile.name,
-          targetPath: targetPath,
-          targetName: targetPath.split('/').last,
-          targetExtension: actualExtension,
-          originalSizeBytes: sourceFile.sizeInBytes,
-          convertedSizeBytes: targetSize,
-          duration: DateTime.now().difference(startTime),
-          timestamp: DateTime.now(),
-          isSuccess: true,
-        );
-      } else {
-        final logs = await session.getAllLogsAsString();
-        return ConversionResult(
-          sourcePath: sourceFile.path,
-          sourceName: sourceFile.name,
-          targetPath: targetPath,
-          targetName: targetPath.split('/').last,
-          targetExtension: actualExtension,
-          originalSizeBytes: sourceFile.sizeInBytes,
-          convertedSizeBytes: 0,
-          duration: DateTime.now().difference(startTime),
-          timestamp: DateTime.now(),
-          isSuccess: false,
-          errorMessage: logs ?? 'Conversion failed with code ${returnCode?.getValue()}',
-        );
+      if (_cancelRequested) {
+        await AppStorageService.deleteQuietly(outFile);
+        return fail('Cancelled');
       }
-    } catch (e) {
-      FFmpegKitConfig.enableStatisticsCallback(null);
+      if (!succeeded) {
+        await AppStorageService.deleteQuietly(outFile);
+        return fail(lastError ?? 'Conversion failed');
+      }
+
+      await AppStorageService.notifyMediaScanner(targetPath);
+      final size = await outFile.length();
+      if (size >= sourceFile.sizeInBytes &&
+          FfmpegCommands.videoTargets.contains(target.id) &&
+          target.id != 'gif') {
+        note ??=
+            'The output is not smaller than the original. The source is already efficiently compressed; '
+            'try SMALLEST quality, a lower resolution or H.265.';
+      }
+
       return ConversionResult(
         sourcePath: sourceFile.path,
         sourceName: sourceFile.name,
         targetPath: targetPath,
         targetName: targetPath.split('/').last,
-        targetExtension: actualExtension,
+        targetExtension: extension,
         originalSizeBytes: sourceFile.sizeInBytes,
-        convertedSizeBytes: 0,
+        convertedSizeBytes: size,
         duration: DateTime.now().difference(startTime),
         timestamp: DateTime.now(),
-        isSuccess: false,
-        errorMessage: e.toString(),
+        note: note,
       );
+    } catch (e) {
+      await AppStorageService.deleteQuietly(outFile);
+      return fail(e.toString());
+    } finally {
+      _activeSessionId = null;
+      FFmpegKitConfig.enableStatisticsCallback(null);
     }
-  }
-
-  static String _resolveActualExtension(String targetFormat) {
-    switch (targetFormat) {
-      case 'av1':
-        return 'mp4';
-      case 'mp4':
-        return 'mp4';
-      case 'mp3':
-        return 'mp3';
-      case 'aac':
-        return 'm4a';
-      case 'wav':
-        return 'wav';
-      case 'webm':
-        return 'webm';
-      case 'mkv':
-        return 'mkv';
-      case 'gif':
-        return 'gif';
-      case 'flac':
-        return 'flac';
-      case 'ogg':
-        return 'ogg';
-      default:
-        return targetFormat;
-    }
-  }
-
-  static String _resolveScaleFilter(String resolution) {
-    switch (resolution.toLowerCase()) {
-      case '1080p':
-        return '-vf "scale=\'min(1920,iw)\':-2"';
-      case '720p':
-        return '-vf "scale=\'min(1280,iw)\':-2"';
-      case '480p':
-        return '-vf "scale=\'min(854,iw)\':-2"';
-      case '360p':
-        return '-vf "scale=\'min(640,iw)\':-2"';
-      default:
-        return '';
-    }
-  }
-
-  static String _buildFFmpegCommand({
-    required String inputPath,
-    required String outputPath,
-    required String targetFormat,
-    required ConversionOptions options,
-    int sourceBitrate = 0,
-  }) {
-    final globalFastFlags = '-y -threads 8';
-    final scaleFilter = _resolveScaleFilter(options.videoResolution);
-
-    switch (targetFormat) {
-      case 'av1':
-        final crf = options.videoCrf.clamp(26, 48);
-        String bitrateConstraint = '';
-        if (sourceBitrate > 0) {
-          final factor = ((50 - crf) / 20.0).clamp(0.35, 0.70);
-          final maxRateKbps = ((sourceBitrate / 1000) * factor).round().clamp(250, 3500);
-          bitrateConstraint = '-maxrate ${maxRateKbps}k -bufsize ${maxRateKbps * 2}k';
-        }
-        return '$globalFastFlags -i "$inputPath" $scaleFilter -c:v libaom-av1 -crf $crf -b:v 0 $bitrateConstraint -cpu-used 8 -row-mt 1 -tiles 2x2 -strict experimental -c:a aac -b:a ${options.audioBitrate} -movflags +faststart "$outputPath"';
-
-      case 'mp4':
-        final crf = options.videoCrf.clamp(22, 36);
-        return '$globalFastFlags -i "$inputPath" $scaleFilter -c:v libx264 -preset veryfast -crf $crf -c:a aac -b:a ${options.audioBitrate} -movflags +faststart "$outputPath"';
-
-      case 'mp3':
-        return '$globalFastFlags -i "$inputPath" -vn -c:a libmp3lame -b:a ${options.audioBitrate} -ar ${options.audioSampleRate} "$outputPath"';
-
-      case 'webm':
-        return '$globalFastFlags -i "$inputPath" $scaleFilter -c:v libvpx-vp9 -crf 36 -b:v 0 -cpu-used 5 -deadline realtime -row-mt 1 -c:a libopus -b:a ${options.audioBitrate} "$outputPath"';
-
-      case 'gif':
-        return '$globalFastFlags -i "$inputPath" -vf "fps=10,scale=\'min(360,iw)\':-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 "$outputPath"';
-
-      case 'mkv':
-        return '$globalFastFlags -i "$inputPath" $scaleFilter -c:v libx264 -preset veryfast -crf 28 -c:a aac "$outputPath"';
-
-      case 'wav':
-        return '$globalFastFlags -i "$inputPath" -vn -c:a pcm_s16le -ar ${options.audioSampleRate} "$outputPath"';
-
-      case 'aac':
-        return '$globalFastFlags -i "$inputPath" -vn -c:a aac -b:a ${options.audioBitrate} "$outputPath"';
-
-      case 'flac':
-        return '$globalFastFlags -i "$inputPath" -vn -c:a flac "$outputPath"';
-
-      case 'ogg':
-        return '$globalFastFlags -i "$inputPath" -vn -c:a libvorbis -q:a 5 "$outputPath"';
-
-      default:
-        return '$globalFastFlags -i "$inputPath" "$outputPath"';
-    }
-  }
-
-  static Future<FileItem> generateSampleVideo() async {
-    final outputDir = await AppStorageService.getOutputDirectory();
-    final samplePath = '${outputDir.path}/sample_test.mp4';
-
-    if (File(samplePath).existsSync()) {
-      return FileItem.fromFile(File(samplePath));
-    }
-
-    final cmd = '-y -threads 8 -f lavfi -i testsrc=duration=3:size=360x240:rate=20 -f lavfi -i sine=frequency=1000:duration=3 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -c:a aac "$samplePath"';
-    await FFmpegKit.execute(cmd);
-    return FileItem.fromFile(File(samplePath));
   }
 }

@@ -1,78 +1,123 @@
+/// Output quality presets for video encodes. Each preset maps to a codec-specific
+/// CRF and to a ceiling relative to the source bitrate, so a re-encode never
+/// produces a file larger than the source at the same resolution.
+enum VideoQuality {
+  high('HIGH'),
+  balanced('BALANCED'),
+  small('SMALLEST');
+
+  final String label;
+  const VideoQuality(this.label);
+}
+
+/// How lossy image and video output is sized: by a quality level, or by a
+/// target size relative to the original file.
+enum CompressionMode {
+  quality('QUALITY'),
+  targetSize('TARGET SIZE');
+
+  final String label;
+  const CompressionMode(this.label);
+}
+
+/// Page size for PDFs built from images. [fit] sizes every page to its image.
+enum PdfPageSize {
+  fit('FIT IMAGE'),
+  a4('A4'),
+  letter('LETTER');
+
+  final String label;
+  const PdfPageSize(this.label);
+}
+
+enum PdfOrientation {
+  auto('AUTO'),
+  portrait('PORTRAIT'),
+  landscape('LANDSCAPE');
+
+  final String label;
+  const PdfOrientation(this.label);
+}
+
+enum PdfMargin {
+  none('NONE', 0),
+  small('SMALL', 18),
+  normal('NORMAL', 36);
+
+  final String label;
+
+  /// Margin in PDF points (1/72 inch).
+  final double points;
+  const PdfMargin(this.label, this.points);
+}
+
 class ConversionOptions {
-  // Image options
-  int imageQuality; // 1 - 100
-  bool progressiveJpeg;
-  int? targetWidth;
-  int? targetHeight;
-  bool keepAspectRatio;
+  final CompressionMode compressionMode;
 
-  // Audio / Video options
-  String audioBitrate; // '64k', '128k', '192k', '256k', '320k'
-  String audioSampleRate; // '44100', '48000'
-  int audioChannels; // 1 (mono), 2 (stereo)
+  final PdfPageSize pdfPageSize;
+  final PdfOrientation pdfOrientation;
+  final PdfMargin pdfMargin;
 
-  // Video AV1 / Transcoding options
-  String videoCodec; // 'libsvtav1', 'libaom-av1', 'libx264', 'libx265', 'libvpx-vp9'
-  int videoCrf; // 0 - 63 (e.g. 28-35 for AV1, 18-23 for x264)
-  int videoPreset; // 0 - 12 for SVT-AV1, or ultrafast - placebo
-  String videoResolution; // 'Original', '1080p', '720p', '480p', '360p'
-  int videoFps; // 0 = original, 24, 30, 60
+  /// Target output size as a percentage of the input, used in [CompressionMode.targetSize].
+  final int targetSizePercent;
 
-  // Document options
-  String docPageRange; // 'all', '1-5', etc.
-  bool extractImagesFromPdf;
+  /// Lossy image quality, 10 to 100. Applies to JPG, WEBP and image-to-PDF.
+  final int imageQuality;
 
-  ConversionOptions({
-    this.imageQuality = 70,
-    this.progressiveJpeg = true,
-    this.targetWidth,
-    this.targetHeight,
-    this.keepAspectRatio = true,
-    this.audioBitrate = '192k',
-    this.audioSampleRate = '44100',
-    this.audioChannels = 2,
-    this.videoCodec = 'libsvtav1',
-    this.videoCrf = 30,
-    this.videoPreset = 6,
-    this.videoResolution = 'Original',
-    this.videoFps = 0,
-    this.docPageRange = 'all',
-    this.extractImagesFromPdf = false,
+  /// Longest edge in pixels for image output. Null keeps the original size.
+  final int? maxImageDimension;
+
+  final VideoQuality videoQuality;
+
+  /// Short edge in pixels for video output (1080, 720, 480). Null keeps the original.
+  final int? maxVideoShortEdge;
+
+  /// Bitrate for lossy audio output (MP3, M4A, OPUS, OGG).
+  final int audioBitrateKbps;
+
+  const ConversionOptions({
+    this.compressionMode = CompressionMode.quality,
+    this.pdfPageSize = PdfPageSize.fit,
+    this.pdfOrientation = PdfOrientation.auto,
+    this.pdfMargin = PdfMargin.none,
+    this.targetSizePercent = 50,
+    this.imageQuality = 75,
+    this.maxImageDimension,
+    this.videoQuality = VideoQuality.balanced,
+    this.maxVideoShortEdge,
+    this.audioBitrateKbps = 128,
   });
 
+  bool get usesTargetSize => compressionMode == CompressionMode.targetSize;
+
+  /// Nullable fields take a getter so callers can reset them to null explicitly.
   ConversionOptions copyWith({
+    CompressionMode? compressionMode,
+    PdfPageSize? pdfPageSize,
+    PdfOrientation? pdfOrientation,
+    PdfMargin? pdfMargin,
+    int? targetSizePercent,
     int? imageQuality,
-    bool? progressiveJpeg,
-    int? targetWidth,
-    int? targetHeight,
-    bool? keepAspectRatio,
-    String? audioBitrate,
-    String? audioSampleRate,
-    int? audioChannels,
-    String? videoCodec,
-    int? videoCrf,
-    int? videoPreset,
-    String? videoResolution,
-    int? videoFps,
-    String? docPageRange,
-    bool? extractImagesFromPdf,
+    int? Function()? maxImageDimension,
+    VideoQuality? videoQuality,
+    int? Function()? maxVideoShortEdge,
+    int? audioBitrateKbps,
   }) {
     return ConversionOptions(
+      compressionMode: compressionMode ?? this.compressionMode,
+      pdfPageSize: pdfPageSize ?? this.pdfPageSize,
+      pdfOrientation: pdfOrientation ?? this.pdfOrientation,
+      pdfMargin: pdfMargin ?? this.pdfMargin,
+      targetSizePercent: targetSizePercent ?? this.targetSizePercent,
       imageQuality: imageQuality ?? this.imageQuality,
-      progressiveJpeg: progressiveJpeg ?? this.progressiveJpeg,
-      targetWidth: targetWidth ?? this.targetWidth,
-      targetHeight: targetHeight ?? this.targetHeight,
-      keepAspectRatio: keepAspectRatio ?? this.keepAspectRatio,
-      audioBitrate: audioBitrate ?? this.audioBitrate,
-      audioSampleRate: audioSampleRate ?? this.audioSampleRate,
-      audioChannels: audioChannels ?? this.audioChannels,
-      videoCodec: videoCodec ?? this.videoCodec,
-      videoCrf: videoCrf ?? this.videoCrf,
-      videoPreset: videoPreset ?? this.videoPreset,
-      videoResolution: videoResolution ?? this.videoResolution,
-      videoFps: videoFps ?? this.videoFps,
-      docPageRange: docPageRange ?? this.docPageRange,
-      extractImagesFromPdf: extractImagesFromPdf ?? this.extractImagesFromPdf,
+      maxImageDimension: maxImageDimension != null
+          ? maxImageDimension()
+          : this.maxImageDimension,
+      videoQuality: videoQuality ?? this.videoQuality,
+      maxVideoShortEdge: maxVideoShortEdge != null
+          ? maxVideoShortEdge()
+          : this.maxVideoShortEdge,
+      audioBitrateKbps: audioBitrateKbps ?? this.audioBitrateKbps,
     );
   }
 }

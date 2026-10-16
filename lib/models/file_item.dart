@@ -1,46 +1,14 @@
 import 'dart:io';
 
 enum FileCategory {
-  image,
-  video,
-  audio,
-  document,
-  archive,
-  unknown;
+  image('IMAGE'),
+  video('VIDEO'),
+  audio('AUDIO'),
+  document('DOCS'),
+  unknown('FILE');
 
-  String get label {
-    switch (this) {
-      case FileCategory.image:
-        return 'Image';
-      case FileCategory.video:
-        return 'Video';
-      case FileCategory.audio:
-        return 'Audio';
-      case FileCategory.document:
-        return 'Document';
-      case FileCategory.archive:
-        return 'Archive';
-      case FileCategory.unknown:
-        return 'Generic File';
-    }
-  }
-
-  String get iconName {
-    switch (this) {
-      case FileCategory.image:
-        return 'image';
-      case FileCategory.video:
-        return 'videocam';
-      case FileCategory.audio:
-        return 'audiotrack';
-      case FileCategory.document:
-        return 'description';
-      case FileCategory.archive:
-        return 'folder_zip';
-      case FileCategory.unknown:
-        return 'insert_drive_file';
-    }
-  }
+  final String label;
+  const FileCategory(this.label);
 }
 
 class FileItem {
@@ -61,7 +29,10 @@ class FileItem {
   });
 
   factory FileItem.fromFile(File file) {
-    final name = file.uri.pathSegments.lastWhere((s) => s.isNotEmpty, orElse: () => 'file');
+    final name = file.uri.pathSegments.lastWhere(
+      (s) => s.isNotEmpty,
+      orElse: () => 'file',
+    );
     final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
     final stat = file.statSync();
 
@@ -75,32 +46,70 @@ class FileItem {
     );
   }
 
-  String get formattedSize {
-    if (sizeInBytes < 1024) return '$sizeInBytes B';
-    if (sizeInBytes < 1024 * 1024) return '${(sizeInBytes / 1024).toStringAsFixed(1)} KB';
-    if (sizeInBytes < 1024 * 1024 * 1024) {
-      return '${(sizeInBytes / (1024 * 1024)).toStringAsFixed(2)} MB';
+  /// File name without its extension.
+  String get baseName =>
+      name.contains('.') ? name.substring(0, name.lastIndexOf('.')) : name;
+
+  String get formattedSize => formatBytes(sizeInBytes);
+
+  static String formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB';
     }
-    return '${(sizeInBytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
+
+  static const imageExtensions = [
+    'png',
+    'jpg',
+    'jpeg',
+    'webp',
+    'gif',
+    'bmp',
+    'ico',
+    'tiff',
+    'tif',
+    'heic',
+    'heif',
+    'avif',
+  ];
+  static const videoExtensions = [
+    'mp4',
+    'mkv',
+    'webm',
+    'avi',
+    'mov',
+    'flv',
+    'wmv',
+    'm4v',
+    '3gp',
+    'ts',
+    'mts',
+  ];
+  static const audioExtensions = [
+    'mp3',
+    'wav',
+    'aac',
+    'flac',
+    'ogg',
+    'oga',
+    'm4a',
+    'wma',
+    'opus',
+    'aiff',
+    'aif',
+    'amr',
+  ];
+  static const documentExtensions = ['pdf', 'docx', 'pptx', 'txt', 'md'];
 
   static FileCategory detectCategory(String ext) {
     final cleanExt = ext.toLowerCase().replaceAll('.', '');
-    if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'ico', 'tiff', 'tif', 'svg', 'heic', 'avif'].contains(cleanExt)) {
-      return FileCategory.image;
-    }
-    if (['mp4', 'mkv', 'webm', 'avi', 'mov', 'flv', 'wmv', 'm4v', '3gp', 'ts'].contains(cleanExt)) {
-      return FileCategory.video;
-    }
-    if (['mp3', 'wav', 'aac', 'flac', 'ogg', 'm4a', 'wma', 'opus', 'aiff'].contains(cleanExt)) {
-      return FileCategory.audio;
-    }
-    if (['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'txt', 'md', 'rtf', 'csv', 'html', 'epub'].contains(cleanExt)) {
-      return FileCategory.document;
-    }
-    if (['zip', 'rar', '7z', 'tar', 'gz', 'bz2'].contains(cleanExt)) {
-      return FileCategory.archive;
-    }
+    if (imageExtensions.contains(cleanExt)) return FileCategory.image;
+    if (videoExtensions.contains(cleanExt)) return FileCategory.video;
+    if (audioExtensions.contains(cleanExt)) return FileCategory.audio;
+    if (documentExtensions.contains(cleanExt)) return FileCategory.document;
     return FileCategory.unknown;
   }
 }

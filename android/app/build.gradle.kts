@@ -25,11 +25,24 @@ android {
         versionName = flutter.versionName
     }
 
+    // The AV1 encoder is an executable shipped as libffmpeg_av1.so; it must be
+    // extracted to the native library directory to be runnable.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // R8 removes unused Java/Kotlin code and resources. FFmpegKit ships
+            // its own keep rules for its JNI entry points.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
 }
