@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:universal_converter/models/conversion_options.dart';

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import 'dart:typed_data';
 
 /// Format-neutral document representation shared by every reader and writer.

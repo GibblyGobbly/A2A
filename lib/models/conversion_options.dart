@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// Output quality presets for video encodes. Each preset maps to a codec-specific
 /// CRF and to a ceiling relative to the source bitrate, so a re-encode never
 /// produces a file larger than the source at the same resolution.

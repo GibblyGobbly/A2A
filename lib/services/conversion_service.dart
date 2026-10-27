@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import '../models/conversion_options.dart';
 import '../models/conversion_result.dart';
 import '../models/conversion_target.dart';

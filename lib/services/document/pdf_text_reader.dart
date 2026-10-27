@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import 'dart:typed_data';
 import 'package:syncfusion_flutter_pdf/pdf.dart' as sf;
 import 'doc_model.dart';

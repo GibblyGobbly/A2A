@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-3.0-or-later
 # Builds the on-device AV1 encoder: a small static FFmpeg command-line binary
 # with SVT-AV1 for arm64-v8a. The bundled ffmpeg-kit build has no AV1 encoder,
 # and most phones (including Snapdragon 8 Elite) have no hardware AV1 encoder,

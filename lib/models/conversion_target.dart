@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// Which settings panel a target needs.
 enum TargetSettings {
   none,

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import '../models/conversion_options.dart';
 
 /// What FFprobe reported about an input. Bitrates are in bits per second.

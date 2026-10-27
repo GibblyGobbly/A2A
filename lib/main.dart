@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import 'dart:developer' as developer;
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';

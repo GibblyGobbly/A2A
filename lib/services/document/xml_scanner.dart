@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// Minimal streaming scanner for OOXML parts. OOXML is machine-generated and
 /// well-formed, so a tag tokenizer is enough and avoids a full XML dependency.
 enum XmlTokenType { open, close, selfClosing, text }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 /// Text for the Terms of Use, Privacy Policy and open-source credits.
 /// Kept as data so the pages and the first-run screen render the same source.
 class LegalSection {

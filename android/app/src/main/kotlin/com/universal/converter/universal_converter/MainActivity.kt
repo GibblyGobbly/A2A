@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.universal.converter.universal_converter
 
 import android.app.DownloadManager

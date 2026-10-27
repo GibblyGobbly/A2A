@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:image/image.dart' as img;
