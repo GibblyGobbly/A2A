@@ -164,7 +164,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _LinkRow(
               icon: Icons.restart_alt,
               title: 'Use default folder',
-              subtitle: 'Download/OmniConvert',
+              subtitle: 'Download/A2A',
               onTap: AppStorageService.resetOutputDirectory,
             ),
           _LinkRow(

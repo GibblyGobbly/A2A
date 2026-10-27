@@ -37,7 +37,7 @@ A2A is an offline file converter and compressor for Android. Images, videos, aud
 
 ## Storage
 
-Converted files are saved to `Download/OmniConvert` by default, or to a folder chosen in Settings. Android 11 and newer only let apps write directly into folders inside Download or Documents, so A2A checks a chosen folder before accepting it. Original files are never modified.
+Converted files are saved to `Download/A2A` by default, or to a folder chosen in Settings. Android 11 and newer only let apps write directly into folders inside Download or Documents, so A2A checks a chosen folder before accepting it. Original files are never modified.
 
 ## Privacy
 

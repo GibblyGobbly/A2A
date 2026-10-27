@@ -19,7 +19,7 @@ void main() {
 
   testWidgets('first launch asks to accept the terms once', (tester) async {
     SettingsService.notifier.value = const AppSettings();
-    await tester.pumpWidget(const OmniConvertApp());
+    await tester.pumpWidget(const A2AApp());
     await tester.pumpAndSettle();
 
     expect(find.text('WELCOME TO A2A'), findsOneWidget);
@@ -40,7 +40,7 @@ void main() {
   ) async {
     tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
     addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
-    await tester.pumpWidget(const OmniConvertApp());
+    await tester.pumpWidget(const A2AApp());
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Settings').first);
     await tester.pumpAndSettle();
@@ -65,7 +65,7 @@ void main() {
   });
 
   testWidgets('settings switches to dark mode', (tester) async {
-    await tester.pumpWidget(const OmniConvertApp());
+    await tester.pumpWidget(const A2AApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Settings').first);
@@ -100,7 +100,7 @@ void main() {
   testWidgets('home shows the image tool and swipes to the video tool', (
     tester,
   ) async {
-    await tester.pumpWidget(const OmniConvertApp());
+    await tester.pumpWidget(const A2AApp());
     await tester.pumpAndSettle();
 
     expect(find.text('IMAGE'), findsWidgets);
@@ -115,7 +115,7 @@ void main() {
   });
 
   testWidgets('bottom bar opens the file history', (tester) async {
-    await tester.pumpWidget(const OmniConvertApp());
+    await tester.pumpWidget(const A2AApp());
     await tester.pumpAndSettle();
 
     await tester.tap(find.bySemanticsLabel('FILES'));

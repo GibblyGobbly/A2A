@@ -10,7 +10,7 @@ class AppSettings {
   final ThemeMode themeMode;
   final bool haptics;
 
-  /// Folder for converted files. Null uses Download/OmniConvert.
+  /// Folder for converted files. Null uses Download/A2A.
   final String? outputDirectory;
 
   /// Version of the Terms of Use the user accepted; 0 when never accepted.

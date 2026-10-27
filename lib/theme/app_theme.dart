@@ -66,7 +66,7 @@ class Palette {
 /// outlines, rounded corners, one yellow accent, and a small hard shadow on
 /// primary actions only.
 ///
-/// Colour tokens read the active [palette], which [OmniConvertApp] sets from
+/// Colour tokens read the active [palette], which [A2AApp] sets from
 /// the resolved theme. Screens call [watch] so they rebuild when it changes.
 class AppTheme {
   static Palette palette = Palette.light;

@@ -27,7 +27,7 @@ void main() async {
   });
 
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  runApp(const OmniConvertApp());
+  runApp(const A2AApp());
 }
 
 /// Flutter lists Dart package licenses automatically. The native encoder and
@@ -63,8 +63,8 @@ void _rebuildEverything(BuildContext context) {
   });
 }
 
-class OmniConvertApp extends StatelessWidget {
-  const OmniConvertApp({super.key});
+class A2AApp extends StatelessWidget {
+  const A2AApp({super.key});
 
   @override
   Widget build(BuildContext context) {

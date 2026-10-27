@@ -29,7 +29,7 @@ void main() {
     SettingsService.notifier.value = SettingsService.current.copyWith(
       outputDirectory: () => null,
     );
-    expect(AppStorageService.publicFolderLabel, 'Download/OmniConvert');
+    expect(AppStorageService.publicFolderLabel, 'Download/A2A');
   });
 
   test('unknown or missing values fall back to defaults', () {

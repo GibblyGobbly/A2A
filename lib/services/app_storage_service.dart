@@ -12,13 +12,12 @@ class AppStorageService {
   static const MethodChannel _channel = MethodChannel(
     'com.universal.converter/storage',
   );
-  static const String defaultOutputPath =
-      '/storage/emulated/0/Download/OmniConvert';
+  static const String defaultOutputPath = '/storage/emulated/0/Download/A2A';
 
   static Directory? _cachedOutputDir;
 
   /// Short, readable form of the current output folder, such as
-  /// "Download/OmniConvert".
+  /// "Download/A2A".
   static String get publicFolderLabel => getDisplayPath(
     SettingsService.current.outputDirectory ?? defaultOutputPath,
   );
@@ -91,7 +90,7 @@ class AppStorageService {
     }
 
     final baseDir = await getApplicationDocumentsDirectory();
-    final outputDir = Directory('${baseDir.path}/OmniConvert');
+    final outputDir = Directory('${baseDir.path}/A2A');
     if (!await outputDir.exists()) {
       await outputDir.create(recursive: true);
     }

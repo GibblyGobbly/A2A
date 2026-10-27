@@ -61,7 +61,7 @@ class Legal {
       ]),
       LegalSection('4. Your files and your responsibility', [
         'You are responsible for the files you convert and for having the right to use them. Do not use A2A to infringe copyright or other rights.',
-        'A2A never changes or deletes your original files. It writes new files to Download/OmniConvert, or to the folder you choose in Settings. Converted files are only deleted when you choose Delete files in the app.',
+        'A2A never changes or deletes your original files. It writes new files to Download/A2A, or to the folder you choose in Settings. Converted files are only deleted when you choose Delete files in the app.',
       ]),
       LegalSection('5. Results', [
         'Conversion between formats can lose quality, layout or features, for example fonts and exact positioning when converting documents, or detail when compressing images and videos. Check results before deleting the originals.',
@@ -90,7 +90,7 @@ class Legal {
       ]),
       LegalSection('Files you choose', [
         'A2A reads only the files you pick or share to it, and only to convert them. Android gives A2A a temporary copy of each picked file in the app\'s private cache. Copies are removed automatically and you can remove them at any time with Clear temporary files.',
-        'Converted files are saved on your phone, in Download/OmniConvert or the folder you choose in Settings.',
+        'Converted files are saved on your phone, in Download/A2A or the folder you choose in Settings.',
       ]),
       LegalSection('Stored on your phone', [
         'A2A keeps a list of your conversions (file names, sizes, folder paths and dates) and your settings in its private storage, so the Files tab can show your history. This never leaves your phone. Clear it with Clear history, or by uninstalling the app.',

@@ -133,7 +133,7 @@ class MainActivity : FlutterActivity() {
                 "getPublicDirectory" -> {
                     try {
                         val downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                        val appDir = File(downloadDir, "OmniConvert")
+                        val appDir = File(downloadDir, "A2A")
                         if (!appDir.exists()) {
                             appDir.mkdirs()
                         }
@@ -196,7 +196,7 @@ class MainActivity : FlutterActivity() {
         // A file:// Uri throws FileUriExposedException on API 24+, so open the folder through
         // the external storage documents provider, then fall back to the system Downloads screen.
         val root = Environment.getExternalStorageDirectory().absolutePath
-        val relative = path?.takeIf { it.startsWith("$root/") }?.removePrefix("$root/") ?: "Download/OmniConvert"
+        val relative = path?.takeIf { it.startsWith("$root/") }?.removePrefix("$root/") ?: "Download/A2A"
         val folderUri = DocumentsContract.buildDocumentUri(
             "com.android.externalstorage.documents",
             "primary:$relative"
