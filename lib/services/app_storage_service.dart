@@ -162,6 +162,16 @@ class AppStorageService {
     }
   }
 
+  /// Makes many new files visible in gallery apps with one native call.
+  static Future<void> notifyMediaScannerAll(List<String> paths) async {
+    if (!Platform.isAndroid || paths.isEmpty) return;
+    try {
+      await _channel.invokeMethod('scanFiles', {'paths': paths});
+    } on PlatformException catch (e) {
+      _log('Media scan failed for ${paths.length} files', e);
+    }
+  }
+
   /// Lets the user pick the output folder. Returns null when the folder was
   /// set or the picker was cancelled, or a message explaining why it was refused.
   static Future<String?> chooseOutputDirectory() async {

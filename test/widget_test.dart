@@ -4,11 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:universal_converter/main.dart';
 import 'package:universal_converter/models/conversion_result.dart';
+import 'package:universal_converter/models/file_item.dart';
 import 'package:universal_converter/services/history_service.dart';
 import 'package:universal_converter/services/settings_service.dart';
 import 'package:universal_converter/theme/app_theme.dart';
 import 'package:universal_converter/views/history_screen.dart';
 import 'package:universal_converter/views/settings_screen.dart';
+import 'package:universal_converter/views/workspace/workspace_screen.dart';
 
 void main() {
   setUp(() {
@@ -31,7 +33,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('ACCEPT AND CONTINUE'));
     await tester.pumpAndSettle();
-    expect(find.text('PICK FILES'), findsOneWidget);
+    expect(find.text('OPEN FILES'), findsOneWidget);
     expect(SettingsService.termsAccepted, isTrue);
   });
 
@@ -97,21 +99,78 @@ void main() {
     expect(find.textContaining('does not collect'), findsOneWidget);
   });
 
-  testWidgets('home shows the image tool and swipes to the video tool', (
-    tester,
-  ) async {
+  testWidgets('home offers open files and the four file types', (tester) async {
     await tester.pumpWidget(const A2AApp());
     await tester.pumpAndSettle();
 
-    expect(find.text('IMAGE'), findsWidgets);
-    expect(find.text('PICK FILES'), findsOneWidget);
+    expect(find.text('OPEN FILES'), findsOneWidget);
+    for (final label in ['Photos', 'Videos', 'Music', 'PDF and docs']) {
+      expect(find.text(label), findsOneWidget);
+    }
+  });
 
-    await tester.fling(find.byType(PageView), const Offset(-400, 0), 1500);
+  testWidgets('workspace lists image tools and blocks single-file ones', (
+    tester,
+  ) async {
+    final files = [_file('a.jpg'), _file('b.png')];
+    await tester.pumpWidget(MaterialApp(home: WorkspaceScreen(files: files)));
     await tester.pumpAndSettle();
+
+    expect(find.text('EDIT'), findsOneWidget);
+    expect(find.text('Rotate and flip'), findsOneWidget);
     expect(
-      find.text('Shrink videos, change format or pull out the audio.'),
-      findsOneWidget,
+      find.text('One photo at a time. Remove the others to use it.'),
+      findsWidgets,
     );
+
+    await tester.scrollUntilVisible(
+      find.text('Photo details'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
+    expect(find.text('PRIVACY'), findsOneWidget);
+  });
+
+  testWidgets('a tool opens from the workspace and goes back', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: WorkspaceScreen(files: [_file('a.jpg')])),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Compress to size'));
+    await tester.pumpAndSettle();
+    expect(find.text('KEEP EACH PHOTO UNDER'), findsOneWidget);
+    expect(find.text('MAKE IT UNDER 100 KB'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    expect(find.text('Compress to size'), findsOneWidget);
+  });
+
+  testWidgets('the pencil renames the name saved copies use', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(home: WorkspaceScreen(files: [_file('53459.jpg')])),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsLabel('Rename 53459.jpg'));
+    await tester.pumpAndSettle();
+    expect(find.text('RENAME'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'bad/name');
+    await tester.pump();
+    expect(find.textContaining('Names cannot contain'), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'holiday');
+    await tester.pump();
+    await tester.tap(find.text('SAVE'));
+    await tester.pumpAndSettle();
+    expect(find.text('holiday.jpg'), findsOneWidget);
+
+    // Tools open on the renamed file.
+    await tester.tap(find.text('Compress to size'));
+    await tester.pumpAndSettle();
+    expect(find.text('holiday.jpg'), findsOneWidget);
   });
 
   testWidgets('bottom bar opens the file history', (tester) async {
@@ -168,4 +227,13 @@ ConversionResult _entry(String name) => ConversionResult(
   convertedSizeBytes: 1000,
   duration: Duration.zero,
   timestamp: DateTime(2026, 1, 1),
+);
+
+FileItem _file(String name) => FileItem(
+  path: '/in/$name',
+  name: name,
+  extension: name.split('.').last,
+  sizeInBytes: 2000,
+  category: FileItem.detectCategory(name.split('.').last),
+  modifiedAt: DateTime(2026, 1, 1),
 );

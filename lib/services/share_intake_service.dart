@@ -8,7 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../models/file_item.dart';
 
 /// Files shared into A2A from other apps. The native side copies them into the
-/// app cache; the matching tool screen takes them with [take].
+/// app cache; the home screen takes them with [takeAll].
 class ShareIntakeService {
   static const MethodChannel _channel = MethodChannel(
     'com.universal.converter/storage',
@@ -60,14 +60,10 @@ class ShareIntakeService {
     if (items.isNotEmpty) pending.value = items;
   }
 
-  /// Returns and clears pending files of [category].
-  static List<FileItem> take(FileCategory category) {
-    final mine = pending.value.where((f) => f.category == category).toList();
-    if (mine.isNotEmpty) {
-      pending.value = pending.value
-          .where((f) => f.category != category)
-          .toList();
-    }
-    return mine;
+  /// Returns and clears every pending file.
+  static List<FileItem> takeAll() {
+    final all = pending.value;
+    if (all.isNotEmpty) pending.value = const [];
+    return all;
   }
 }

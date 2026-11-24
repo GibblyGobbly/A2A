@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import 'dart:async';
 import 'dart:developer' as developer;
 import 'dart:io';
-import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit_config.dart';
-import 'package:ffmpeg_kit_flutter_new/ffmpeg_session.dart';
 import 'package:ffmpeg_kit_flutter_new/ffprobe_kit.dart';
-import 'package:ffmpeg_kit_flutter_new/return_code.dart';
 import '../models/conversion_options.dart';
 import '../models/conversion_result.dart';
 import '../models/conversion_target.dart';
@@ -15,20 +10,13 @@ import '../models/file_item.dart';
 import 'app_storage_service.dart';
 import 'av1_encoder_service.dart';
 import 'ffmpeg_commands.dart';
+import 'media/ffmpeg_runner.dart';
+import 'video/video_job.dart';
 
 class MediaConverterService {
-  static int? _activeSessionId;
-  static bool _cancelRequested = false;
-
   static Future<void> cancelActiveConversions() async {
-    _cancelRequested = true;
     await Av1EncoderService.cancel();
-    final id = _activeSessionId;
-    try {
-      await FFmpegKit.cancel(id);
-    } on Exception catch (e) {
-      developer.log('Cancel failed: $e', name: 'MediaConverterService');
-    }
+    await FfmpegRunner.cancel();
   }
 
   static Future<MediaProbe> probe(FileItem source) async {
@@ -78,42 +66,6 @@ class MediaConverterService {
     }
   }
 
-  /// Runs FFmpeg asynchronously so it can be cancelled, reporting progress from 0 to 1.
-  static Future<FFmpegSession> _run(
-    List<String> args,
-    double totalMs,
-    void Function(double)? onProgress,
-  ) {
-    final completer = Completer<FFmpegSession>();
-    FFmpegKit.executeWithArgumentsAsync(
-      args,
-      (session) => completer.complete(session),
-      null,
-      (statistics) {
-        if (totalMs > 0 && onProgress != null) {
-          onProgress((statistics.getTime() / totalMs).clamp(0.0, 1.0));
-        }
-      },
-    ).then(
-      (session) => _activeSessionId = session.getSessionId(),
-      onError: completer.completeError,
-    );
-    return completer.future;
-  }
-
-  /// Runs [args] in ffmpeg-kit. Returns null on success, or the error text.
-  static Future<String?> _runKit(
-    List<String> args,
-    double totalMs,
-    void Function(double)? onProgress,
-  ) async {
-    final session = await _run(args, totalMs, onProgress);
-    final code = await session.getReturnCode();
-    if (ReturnCode.isSuccess(code)) return null;
-    if (ReturnCode.isCancel(code)) return 'Cancelled';
-    return _failureText(session);
-  }
-
   /// Runs [args] in the bundled SVT-AV1 executable. Returns null on success.
   static Future<String?> _runSvt(
     List<String> args,
@@ -134,19 +86,6 @@ class MediaConverterService {
         : result.errorTail;
   }
 
-  static Future<String> _failureText(FFmpegSession session) async {
-    final logs = await session.getAllLogsAsString() ?? '';
-    final lines = logs
-        .split('\n')
-        .map((l) => l.trim())
-        .where((l) => l.isNotEmpty)
-        .toList();
-    // The last few log lines carry the actual FFmpeg error.
-    final tail = lines.length > 4 ? lines.sublist(lines.length - 4) : lines;
-    final code = (await session.getReturnCode())?.getValue();
-    return tail.isEmpty ? 'FFmpeg failed with code $code' : tail.join('\n');
-  }
-
   static Future<ConversionResult> convertMedia({
     required FileItem sourceFile,
     required ConversionTarget target,
@@ -154,7 +93,7 @@ class MediaConverterService {
     void Function(double progress)? onProgress,
   }) async {
     final startTime = DateTime.now();
-    _cancelRequested = false;
+    FfmpegRunner.reset();
     final extension = FfmpegCommands.outputExtension(target.id);
     final targetPath = await AppStorageService.generateOutputPath(
       baseName: sourceFile.baseName,
@@ -180,6 +119,10 @@ class MediaConverterService {
 
       // AV1: the phone's hardware encoder when it has one, then SVT-AV1 on all
       // CPU cores, then H.264 as a last resort so the conversion completes.
+      // H.264 and H.265: the video chip when chosen, then the CPU encoder.
+      final chip = options.fastVideoEncoder && info.hasVideo
+          ? FfmpegCommands.hardwareEncoderFor(target.id)
+          : null;
       final encoders = target.id == 'av1'
           ? <VideoEncoder?>[
               if (await AppStorageService.hasHardwareAv1Encoder())
@@ -187,12 +130,12 @@ class MediaConverterService {
               if (await Av1EncoderService.isAvailable()) VideoEncoder.av1Svt,
               VideoEncoder.h264,
             ]
-          : <VideoEncoder?>[null];
+          : <VideoEncoder?>[?chip, null];
       String? note;
       String? lastError;
       var succeeded = false;
       for (final encoder in encoders) {
-        if (_cancelRequested) break;
+        if (FfmpegRunner.cancelRequested) break;
         await AppStorageService.deleteQuietly(outFile);
         onProgress?.call(0);
         final args = FfmpegCommands.build(
@@ -205,12 +148,18 @@ class MediaConverterService {
         );
         final error = encoder == VideoEncoder.av1Svt
             ? await _runSvt(args, totalMs, onProgress)
-            : await _runKit(args, totalMs, onProgress);
+            : await FfmpegRunner.run(
+                args,
+                totalMs: totalMs,
+                onProgress: onProgress,
+              );
         if (error == null && await outFile.exists()) {
           succeeded = true;
           if (target.id == 'av1' && encoder == VideoEncoder.h264) {
             note =
                 'No AV1 encoder could process this video, so it was saved as H.264.';
+          } else if (chip != null && encoder == null) {
+            note = VideoJob.softwareFallbackNote;
           }
           break;
         }
@@ -221,7 +170,7 @@ class MediaConverterService {
         );
       }
 
-      if (_cancelRequested) {
+      if (FfmpegRunner.cancelRequested) {
         await AppStorageService.deleteQuietly(outFile);
         return fail('Cancelled');
       }
@@ -255,9 +204,6 @@ class MediaConverterService {
     } catch (e) {
       await AppStorageService.deleteQuietly(outFile);
       return fail(e.toString());
-    } finally {
-      _activeSessionId = null;
-      FFmpegKitConfig.enableStatisticsCallback(null);
     }
   }
 }

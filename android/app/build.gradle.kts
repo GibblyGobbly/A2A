@@ -52,6 +52,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Installs beside the release app, so testing never touches its data.
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+        }
         release {
             // Uses android/key.properties when present (CI and release builds);
             // otherwise falls back to the debug key so local release runs work.

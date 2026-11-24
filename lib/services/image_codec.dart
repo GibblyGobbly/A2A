@@ -76,6 +76,8 @@ class ImageCodec {
         return img.encodeBmp(image);
       case 'gif':
         return img.encodeGif(image);
+      case 'tiff':
+        return img.encodeTiff(image);
       case 'ico':
         return img.encodeIco(shrinkToFit(image, 256));
       default:

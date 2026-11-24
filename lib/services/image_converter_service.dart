@@ -3,49 +3,16 @@
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:typed_data';
-import 'package:ffmpeg_kit_flutter_new/ffmpeg_kit.dart';
-import 'package:ffmpeg_kit_flutter_new/return_code.dart';
-import 'package:image/image.dart' as img;
 import '../models/conversion_options.dart';
 import '../models/conversion_result.dart';
 import '../models/conversion_target.dart';
 import '../models/file_item.dart';
 import 'app_storage_service.dart';
+import 'image/image_source.dart';
 import 'image_codec.dart';
+import 'output_writer.dart';
 
 class ImageConverterService {
-  /// Reads [source] and returns bytes the pure-Dart decoder understands. Formats it
-  /// cannot read (HEIC, AVIF) are first transcoded to PNG with FFmpeg in a private work dir.
-  static Future<Uint8List> _readDecodableBytes(
-    FileItem source,
-    Directory workDir,
-  ) async {
-    final bytes = await File(source.path).readAsBytes();
-    final decoder = img.findDecoderForData(bytes);
-    if (decoder != null) return bytes;
-
-    final pngPath =
-        '${workDir.path}/decoded_${DateTime.now().microsecondsSinceEpoch}.png';
-    final session = await FFmpegKit.executeWithArguments([
-      '-y',
-      '-i',
-      source.path,
-      '-frames:v',
-      '1',
-      '-threads',
-      '8',
-      pngPath,
-    ]);
-    final code = await session.getReturnCode();
-    final pngFile = File(pngPath);
-    if (!ReturnCode.isSuccess(code) || !await pngFile.exists()) {
-      throw const FormatException('This image format could not be read');
-    }
-    final pngBytes = await pngFile.readAsBytes();
-    await AppStorageService.deleteQuietly(pngFile);
-    return pngBytes;
-  }
-
   static Future<ConversionResult> convertImage({
     required FileItem sourceFile,
     required ConversionTarget target,
@@ -57,7 +24,7 @@ class ImageConverterService {
     final workDir = await AppStorageService.createWorkDirectory();
 
     try {
-      final input = await _readDecodableBytes(sourceFile, workDir);
+      final input = await ImageSource.readDecodable(sourceFile, workDir);
       final maxDim = target.id == 'ico' ? null : options.maxImageDimension;
       final quality = options.imageQuality;
       final layout = PdfLayout.fromOptions(options);
@@ -131,7 +98,7 @@ class ImageConverterService {
         targetExtension: targetExt,
         originalSizeBytes: sourceFile.sizeInBytes,
         startedAt: startTime,
-        errorMessage: _describe(e),
+        errorMessage: OutputWriter.describe(e),
       );
     } finally {
       await AppStorageService.deleteQuietly(workDir);
@@ -156,7 +123,7 @@ class ImageConverterService {
       final layout = PdfLayout.fromOptions(options);
       final jpegPages = <JpegPage>[];
       for (var i = 0; i < sources.length; i++) {
-        final input = await _readDecodableBytes(sources[i], workDir);
+        final input = await ImageSource.readDecodable(sources[i], workDir);
         final name = sources[i].name;
         final page = await Isolate.run(() {
           final decoded = ImageCodec.decodeAndPrepare(
@@ -205,19 +172,10 @@ class ImageConverterService {
         targetExtension: 'pdf',
         originalSizeBytes: totalInput,
         startedAt: startTime,
-        errorMessage: _describe(e),
+        errorMessage: OutputWriter.describe(e),
       );
     } finally {
       await AppStorageService.deleteQuietly(workDir);
     }
-  }
-
-  static String _describe(Object e) {
-    if (e is FormatException) return e.message;
-    if (e is FileSystemException) {
-      return 'File error: ${e.message} ${e.path ?? ''}'.trim();
-    }
-    if (e is UnsupportedError) return e.message ?? 'Unsupported format';
-    return e.toString();
   }
 }

@@ -40,7 +40,17 @@ class MediaProbe {
 
 /// Video encoders the builder can target.
 /// [av1Svt] runs in the bundled SVT-AV1 executable, not in ffmpeg-kit.
-enum VideoEncoder { h264, hevc, av1Svt, av1Hardware, vp9 }
+enum VideoEncoder {
+  h264,
+  hevc,
+  av1Svt,
+  av1Hardware,
+  vp9,
+
+  /// The phone's video chip through MediaCodec; bitrate driven.
+  h264Hardware,
+  hevcHardware,
+}
 
 /// Builds FFmpeg argument lists. Arguments are passed as a list (never a joined
 /// string), so file names with spaces, quotes or apostrophes are safe.
@@ -73,6 +83,14 @@ class FfmpegCommands {
     return null;
   }
 
+  /// The phone's video chip for [targetId], or null when it has none.
+  static VideoEncoder? hardwareEncoderFor(String targetId) =>
+      switch (targetId) {
+        'mp4' || 'mkv' => VideoEncoder.h264Hardware,
+        'hevc' => VideoEncoder.hevcHardware,
+        _ => null,
+      };
+
   static int _crf(VideoEncoder encoder, VideoQuality quality) {
     const table = {
       VideoEncoder.h264: [23, 26, 30],
@@ -80,6 +98,8 @@ class FfmpegCommands {
       VideoEncoder.vp9: [31, 35, 40],
       VideoEncoder.av1Svt: [30, 36, 44],
       VideoEncoder.av1Hardware: [0, 0, 0],
+      VideoEncoder.h264Hardware: [0, 0, 0],
+      VideoEncoder.hevcHardware: [0, 0, 0],
     };
     return table[encoder]![quality.index];
   }
@@ -316,6 +336,9 @@ class FfmpegCommands {
           '-pix_fmt',
           'yuv420p',
         ];
+      case VideoEncoder.h264Hardware:
+      case VideoEncoder.hevcHardware:
+        return _hardwareArgs(encoder, bitrate);
       case VideoEncoder.av1Hardware:
         return [
           '-c:v',
@@ -404,6 +427,12 @@ class FfmpegCommands {
         ]);
         if (cap != null) args.addAll(['-maxrate', '$cap']);
         break;
+      case VideoEncoder.h264Hardware:
+      case VideoEncoder.hevcHardware:
+        // Bitrate driven like the AV1 chip path; the quality preset's ceiling
+        // is the target, or 4 Mbps when the source bitrate is unknown.
+        args.addAll(_hardwareArgs(encoder, cap ?? 4000000));
+        break;
       case VideoEncoder.av1Hardware:
         // Hardware encoders are bitrate driven. AV1 needs about 30% less than H.264 for
         // the same quality, so target 70% of the ceiling; 2 Mbps when the source is unknown.
@@ -421,6 +450,18 @@ class FfmpegCommands {
 
     return args;
   }
+
+  static List<String> _hardwareArgs(VideoEncoder encoder, int bitrate) => [
+    '-c:v',
+    encoder == VideoEncoder.hevcHardware
+        ? 'hevc_mediacodec'
+        : 'h264_mediacodec',
+    '-b:v',
+    '$bitrate',
+    '-pix_fmt',
+    'nv12',
+    if (encoder == VideoEncoder.hevcHardware) ...['-tag:v', 'hvc1'],
+  ];
 
   static String _vorbisQuality(int kbps) {
     if (kbps <= 64) return '0';

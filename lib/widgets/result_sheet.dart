@@ -52,7 +52,9 @@ class SizeChangeTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final change = result.reductionPercentage;
-    final smaller = change > 0;
+    // Under half a percent rounds to 0; say so instead of showing "-0%".
+    final same = change.abs() < 0.5;
+    final smaller = change > 0 && !same;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -61,7 +63,9 @@ class SizeChangeTag extends StatelessWidget {
         border: Border.all(color: AppTheme.ink, width: AppTheme.stroke),
       ),
       child: Text(
-        smaller
+        same
+            ? 'SAME'
+            : smaller
             ? '-${change.toStringAsFixed(0)}%'
             : '+${(-change).toStringAsFixed(0)}%',
         style: AppTheme.label.copyWith(

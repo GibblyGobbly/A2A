@@ -4,14 +4,11 @@ import '../models/conversion_options.dart';
 import '../models/conversion_result.dart';
 import '../models/conversion_target.dart';
 import '../models/file_item.dart';
+import 'batch_runner.dart';
 import 'document_converter_service.dart';
 import 'history_service.dart';
 import 'image_converter_service.dart';
 import 'media_converter_service.dart';
-
-/// Progress of a batch: overall fraction 0..1, or null while a step cannot
-/// report progress, plus a short status line.
-typedef BatchProgress = void Function(double? progress, String status);
 
 /// Routes each file to the right converter. Files are processed one at a time so
 /// image and document buffers from one file are released before the next starts.

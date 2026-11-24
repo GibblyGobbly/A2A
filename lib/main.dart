@@ -10,7 +10,7 @@ import 'services/native_events.dart';
 import 'services/settings_service.dart';
 import 'services/share_intake_service.dart';
 import 'theme/app_theme.dart';
-import 'views/home_screen.dart';
+import 'views/home/home_shell.dart';
 import 'views/welcome_screen.dart';
 
 void main() async {
@@ -101,7 +101,7 @@ class A2AApp extends StatelessWidget {
         home: AnimatedSwitcher(
           duration: const Duration(milliseconds: 350),
           child: SettingsService.termsAccepted
-              ? const HomeScreen()
+              ? const HomeShell()
               : const WelcomeScreen(),
         ),
       ),

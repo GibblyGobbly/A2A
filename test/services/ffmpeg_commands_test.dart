@@ -57,6 +57,31 @@ void main() {
       },
     );
 
+    test('the phone chip path is bitrate driven and capped by quality', () {
+      expect(
+        FfmpegCommands.hardwareEncoderFor('mp4'),
+        VideoEncoder.h264Hardware,
+      );
+      expect(
+        FfmpegCommands.hardwareEncoderFor('hevc'),
+        VideoEncoder.hevcHardware,
+      );
+      expect(FfmpegCommands.hardwareEncoderFor('webm'), isNull);
+      final args = FfmpegCommands.build(
+        input: 'in.mp4',
+        output: 'out.mp4',
+        targetId: 'mp4',
+        options: const ConversionOptions(),
+        probe: _probe,
+        encoderOverride: VideoEncoder.h264Hardware,
+      );
+      expect(_value(args, '-c:v'), 'h264_mediacodec');
+      // Balanced keeps 55% of the 7.8 Mbps source.
+      expect(_value(args, '-b:v'), '4290000');
+      expect(args, isNot(contains('-crf')));
+      expect(args, containsAllInOrder(['-movflags', '+faststart']));
+    });
+
     test('audio extraction strips video and maps the first audio stream', () {
       for (final target in FfmpegCommands.audioTargets) {
         final args = _build(target, out: 'out.$target');

@@ -77,6 +77,10 @@ class ConversionOptions {
   /// Bitrate for lossy audio output (MP3, M4A, OPUS, OGG).
   final int audioBitrateKbps;
 
+  /// Encode H.264 and H.265 on the phone's video chip (fast) instead of the
+  /// CPU (smaller files). Falls back to the CPU when the chip fails.
+  final bool fastVideoEncoder;
+
   const ConversionOptions({
     this.compressionMode = CompressionMode.quality,
     this.pdfPageSize = PdfPageSize.fit,
@@ -88,6 +92,7 @@ class ConversionOptions {
     this.videoQuality = VideoQuality.balanced,
     this.maxVideoShortEdge,
     this.audioBitrateKbps = 128,
+    this.fastVideoEncoder = true,
   });
 
   bool get usesTargetSize => compressionMode == CompressionMode.targetSize;
@@ -104,6 +109,7 @@ class ConversionOptions {
     VideoQuality? videoQuality,
     int? Function()? maxVideoShortEdge,
     int? audioBitrateKbps,
+    bool? fastVideoEncoder,
   }) {
     return ConversionOptions(
       compressionMode: compressionMode ?? this.compressionMode,
@@ -120,6 +126,7 @@ class ConversionOptions {
           ? maxVideoShortEdge()
           : this.maxVideoShortEdge,
       audioBitrateKbps: audioBitrateKbps ?? this.audioBitrateKbps,
+      fastVideoEncoder: fastVideoEncoder ?? this.fastVideoEncoder,
     );
   }
 }

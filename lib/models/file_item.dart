@@ -48,6 +48,17 @@ class FileItem {
     );
   }
 
+  /// The same file under a different name. Only the name used for saved
+  /// copies changes; the file on disk is not renamed.
+  FileItem withBaseName(String newBaseName) => FileItem(
+    path: path,
+    name: extension.isEmpty ? newBaseName : '$newBaseName.$extension',
+    extension: extension,
+    sizeInBytes: sizeInBytes,
+    category: category,
+    modifiedAt: modifiedAt,
+  );
+
   /// File name without its extension.
   String get baseName =>
       name.contains('.') ? name.substring(0, name.lastIndexOf('.')) : name;

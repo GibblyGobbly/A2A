@@ -151,6 +151,50 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_PATH", "Path is null", null)
                     }
                 }
+                "scanFiles" -> {
+                    val paths = call.argument<List<String>>("paths")
+                    if (paths != null) {
+                        MediaScannerConnection.scanFile(applicationContext, paths.toTypedArray(), null) { _, _ -> }
+                        result.success(true)
+                    } else {
+                        result.error("INVALID_PATH", "paths is null", null)
+                    }
+                }
+                "videoThumbnails" -> {
+                    val path = call.argument<String>("path")
+                    val outDir = call.argument<String>("outDir")
+                    val count = call.argument<Int>("count") ?: 10
+                    val height = call.argument<Int>("height") ?: 120
+                    if (path == null || outDir == null) {
+                        result.error("INVALID_ARGS", "path and outDir are required", null)
+                    } else {
+                        worker.execute {
+                            try {
+                                val thumbs = VideoThumbnails.extract(path, outDir, count, height)
+                                mainHandler.post { result.success(thumbs) }
+                            } catch (e: Exception) {
+                                mainHandler.post { result.error("THUMB_ERROR", e.message ?: e.toString(), null) }
+                            }
+                        }
+                    }
+                }
+                "workStart" -> {
+                    WorkService.start(this, call.argument<String>("title") ?: "Working")
+                    result.success(true)
+                }
+                "workUpdate" -> {
+                    WorkService.update(
+                        this,
+                        call.argument<String>("title") ?: "Working",
+                        call.argument<String>("text") ?: "",
+                        call.argument<Int>("percent") ?: -1
+                    )
+                    result.success(true)
+                }
+                "workStop" -> {
+                    WorkService.stop(this)
+                    result.success(true)
+                }
                 "openFolder" -> openFolder(call.argument<String>("path"), result)
                 "hasHardwareAv1Encoder" -> result.success(hasHardwareAv1Encoder())
                 "hasAv1Encoder" -> result.success(av1EncoderBinary().canExecute())

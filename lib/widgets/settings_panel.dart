@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/conversion_options.dart';
 import '../models/conversion_target.dart';
 import '../models/file_item.dart';
+import '../services/ffmpeg_commands.dart';
 import '../theme/app_theme.dart';
 import 'brutal.dart';
 
@@ -62,6 +63,9 @@ class SettingsPanel extends StatelessWidget {
             ),
           );
         }
+        if (FfmpegCommands.hardwareEncoderFor(target.id) != null) {
+          add(_encoderChoice());
+        }
         add(
           _choice(
             'Resolution',
@@ -104,6 +108,27 @@ class SettingsPanel extends StatelessWidget {
       children: sections,
     );
   }
+
+  Widget _encoderChoice() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      _choice(
+        'Encoder',
+        const [true, false],
+        options.fastVideoEncoder,
+        (fast) => fast ? 'FAST' : 'SMALLEST',
+        (fast) => onChanged(options.copyWith(fastVideoEncoder: fast)),
+      ),
+      const SizedBox(height: 8),
+      Text(
+        options.fastVideoEncoder
+            ? "Uses the phone's video chip: several times faster and easy on "
+                  'the battery. Files are a little larger.'
+            : 'Uses the CPU: slower, but the smallest file for the quality.',
+        style: AppTheme.caption,
+      ),
+    ],
+  );
 
   Widget _choice<T>(
     String label,

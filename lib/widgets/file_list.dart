@@ -5,21 +5,35 @@ import 'package:flutter/material.dart';
 import '../models/file_item.dart';
 import '../theme/app_theme.dart';
 import 'brutal.dart';
+import 'rename_dialog.dart';
 
 /// Selected inputs. Drag the handle to reorder (this is the page order when
 /// combining into one PDF); swipe a row sideways to remove it. [onReorder]
-/// receives the final index of the moved item.
+/// receives the final index of the moved item. With [onRename] set, tapping a
+/// name lets the user change the name saved copies get.
 class FileList extends StatelessWidget {
   final List<FileItem> files;
   final void Function(int oldIndex, int newIndex) onReorder;
   final ValueChanged<int> onRemove;
+  final void Function(int index, String baseName)? onRename;
 
   const FileList({
     super.key,
     required this.files,
     required this.onReorder,
     required this.onRemove,
+    this.onRename,
   });
+
+  Future<void> _rename(BuildContext context, int index) async {
+    final file = files[index];
+    final name = await showRenameDialog(
+      context,
+      initial: file.baseName,
+      extension: file.extension,
+    );
+    if (name != null) onRename?.call(index, name);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,22 +71,11 @@ class FileList extends StatelessWidget {
                   _Thumb(file: file),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          file.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTheme.body.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        Text(
-                          '${file.extension.toUpperCase()}  ${file.formattedSize}',
-                          style: AppTheme.caption,
-                        ),
-                      ],
+                    child: _NameBlock(
+                      file: file,
+                      onTap: onRename == null
+                          ? null
+                          : () => _rename(context, index),
                     ),
                   ),
                   if (files.length > 1)
@@ -97,6 +100,60 @@ class FileList extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// File name and details. When [onTap] is set the name shows a pencil and
+/// tapping the block renames it.
+class _NameBlock extends StatelessWidget {
+  final FileItem file;
+  final VoidCallback? onTap;
+
+  const _NameBlock({required this.file, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final nameStyle = AppTheme.body.copyWith(fontWeight: FontWeight.w700);
+    final content = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 48),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Flexible(
+                child: Text(
+                  file.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: nameStyle,
+                ),
+              ),
+              if (onTap != null) ...[
+                const SizedBox(width: 8),
+                Icon(Icons.edit_outlined, size: 18, color: AppTheme.ink),
+              ],
+            ],
+          ),
+          Text(
+            '${file.extension.toUpperCase()}  ${file.formattedSize}',
+            style: AppTheme.caption,
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) return content;
+    return Semantics(
+      button: true,
+      label: 'Rename ${file.name}',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: AppTheme.radiusSmall,
+        child: content,
       ),
     );
   }
